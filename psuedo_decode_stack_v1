@@ -1,0 +1,87 @@
+def decode_stack(sp: Int, bs: Bits) : (Val, Bits) = {
+val action = st(sp).action
+val next = st(sp).next
+val r = st(sp).regx
+if(action == ST)//we have the rest of the star to finish
+{
+  bs match {
+    case Z::bs => {
+      fill nnode with END
+      decode_stack(next, bs)
+    }
+    case S::bs => {
+      create new node nnode and insert between sp and sp + 1
+      nnode.next = next
+      nnode.r = r
+      nnode.action = ST
+      st(sp).action = NST
+      st(sp).next = nnode
+      st(sp).r = r
+      decode_stack(sp, bs)
+    }
+  }
+}
+(r, bs) match {
+  case (ONE, bs) => {
+    fill in sp with Empty
+    decode_stack(next, bs)
+  }
+  case (PRED(f), bs) => {
+    fill in sp with Prd
+    decode_stack(next, bs)
+  }
+  case (ALTS(rs), bs) => {
+    val le = rs.length
+    val det = bs.take(le - 1)
+    val chosen =  det.indexWhere(_ == Z)
+    create a new node nnode between sp and sp + 1
+    nnode.action = NST
+    nnode.next = next
+    if(chosen ==  -1){
+      fill in sp with Posi(le)
+      nnode.r = rs(le - 1)
+      decode_stack(*nnode, bs.drop(le - 1))
+    }
+    else{
+      fill in sp with Posi(chosen + 1)
+      nnode.r = rs(chosen)
+      decode_stack(*nnode, bs.drop(chosen + 1))
+    }
+  }
+  case (SEQ(r1, r2), bs) => {
+    create 2 new nodes, insert between sp and sp + 1
+    st(sp + 1).action = NST
+    st(sp + 2).action = NST
+    st(sp + 1).next = sp + 2
+    st(sp + 2).next = next
+    st(sp + 1).r = r1
+    st(sp + 2).r = r2
+    create new node nnode between sp and sp + 1
+    fill nnode with Seque 
+    decode_stack(sp + 1, bs)
+  }
+  case (STAR(r1), S::bs) => {
+    create three new nodes, nnode1, nnode2
+    fill nnode1 with STS 
+    nnode2.action = ST
+    nnode2.r = r1
+    nnode2.next = next
+    decode_stack(*nnode2, bs)
+  }
+  case (STAR(_), Z::bs) => {
+    create 2 new nodes, nnode1, nnode2 between sp and sp + 1
+    fill nnode1 with STS
+    fill nnode2 with ENDSTS
+    decode_stack(next, bs)
+  }
+  case (RECD(x, r1), bs) => {
+    create new node nnode between sp and sp + 1
+    nnode.next = next
+    nnode.r = r1
+    nnode.action = NST
+    fill sp with RECD(x)
+    decode_stack(*nnode, bs)
+  }
+  }
+
+}
