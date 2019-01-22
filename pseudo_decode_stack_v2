@@ -1,0 +1,118 @@
+
+//st is the global var stack, made with a linked list?
+def decode_stack(sp: Int, bs: Bits) : (Val, Bits) = {
+val action = st(sp).action
+val next = st(sp).next
+val r = st(sp).r
+if(action == ST)//we have the rest of the star to finish(ST -> STAR)
+{
+  bs match {
+    case Z::bs => {//pv -> partial value  Each grid in a stack does not hold a whole value but a partial one.
+      st(sp).pv = END
+      decode_stack(next, bs)
+    }
+    case S::bs => {
+      move all the items above sp up by distance 1
+      //create new node nnode and insert between sp and sp + 1
+      st(sp + 1).next = next
+      st(sp + 1).r = r
+      st(sp + 1).action = ST
+      st(sp).action = NST //NST -> NON-STAR
+      st(sp).next = nnode
+      st(sp).r = r
+      decode_stack(sp, bs)
+    }
+  }
+}
+(r, bs) match{
+  case (ONE, bs) => {
+    //fill in sp with Empty
+    st(sp).pv = Empty
+    decode_stack(next, bs)
+  }
+  case (PRED(f), bs) => {
+    //fill in sp with Prd
+    st(sp).pv = Prd
+    decode_stack(next, bs)
+  }
+  case (ALTS(rs), bs) => {
+    val le = rs.length
+    val det = bs.take(le - 1)
+    val chosen =  det.indexWhere(_ == Z)
+    //create a new node nnode between sp and sp + 1
+    move all the items above sp up by distance 1
+    //nnode.action = NST
+    //nnode.next = next
+    st(sp + 1).action = NST
+    st(sp + 1).next = next
+    if(chosen ==  -1){
+      //fill in sp with Posi(le)
+      st(sp).pv = Posi(le)
+      //nnode.r = rs(le - 1)
+      st(sp + 1).r = rs(le - 1)
+      //decode_stack(*nnode, bs.drop(le - 1))
+      decode_stack(sp + 1, bs.drop(le - 1))
+    }
+    else{
+      //fill in sp with Posi(chosen + 1)
+      //nnode.r = rs(chosen)
+      //decode_stack(*nnode, bs.drop(chosen + 1))
+      st(sp).pv = Posi(chosen + 1)
+      st(sp + 1).r = rs(chosen)
+      decode_stack(sp + 1, bs.drop(chosen + 1))
+    }
+  }
+  case (SEQ(r1, r2), bs) => {
+    //create 2 new nodes, insert between sp and sp + 1
+    move all nodes above sp up by distance 3
+    st(sp + 2).action = NST
+    st(sp + 3).action = NST
+    st(sp + 2).next = sp + 2
+    st(sp + 3).next = next
+    st(sp + 2).r = r1
+    st(sp + 3).r = r2
+    //create new node nnode between sp and sp + 1
+    //fill nnode with Seque 
+    st(sp + 1).pv = Seque
+    decode_stack(sp + 1, bs)
+  }
+  case (STAR(r1), S::bs) => {
+    //create 1 new node, nnode1
+    move all nodes above sp up by distance 1
+    //fill sp with STS 
+    st(sp).pv = STS //STS -> STARS
+    //nnode1.action = ST
+    //nnode1.r = r1
+    //nnode1.next = next
+    st(sp + 1).action = ST
+    st(sp + 1).r = r1
+    st(sp + 1).next = next
+    //decode_stack(*nnode1, bs)
+    decode_stack(sp + 1, bs)
+  }
+  case (STAR(_), Z::bs) => {
+    //create 2 new nodes, nnode1, nnode2 between sp and sp + 1
+    move all nodes above sp up by 2
+    //fill nnode1 with STS
+    //fill nnode2 with ENDSTS
+    st(sp).pv = STS
+    st(sp + 1).pv = ENDSTS
+    decode_stack(next, bs)
+  }
+  case (RECD(x, r1), bs) => {
+    //create new node nnode between sp and sp + 1
+    move all nodes above sp up by 1
+    //nnode.next = next
+    //nnode.r = r1
+    //nnode.action = NST
+    //fill sp with RECD(x)
+    //decode_stack(*nnode, bs)
+    st(sp + 1).next = next
+    st(sp + 1).r = r1
+    st(sp + 1).action = NST
+    st(sp).pv = RECD(x)
+    decode_stack(sp + 1, bs)
+  }
+}
+}
+//advantage: may decode chunks of bits
