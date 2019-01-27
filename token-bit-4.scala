@@ -23,6 +23,7 @@ type Bits = List[Bit]
 abstract class Action
 case object ST extends Action
 case object NST extends Action
+case object AL extends Action
 
 abstract class PartialValue
 case object Plhdr extends PartialValue
@@ -33,7 +34,10 @@ case object Empt extends PartialValue
 case object Seque extends PartialValue
 case class Posi(i: Int) extends PartialValue
 case class RECRD(x: String) extends PartialValue
-
+case object ALTSTART extends  PartialValue
+case object ALTEND extends PartialValue
+case object RIG extends PartialValue
+case object LEF extends PartialValue
 
 abstract class Rexp 
 case object ZERO extends Rexp
@@ -128,7 +132,7 @@ var top = 0
 //st is the global var stack, made with a linked list?
 def decode_stack(sp: Int, bs: Bits): Unit = {
 if(action_stack.isEmpty){
-  return Unit
+  return 
 }
 val action = action_stack.last
 action_stack.trimEnd(1)
@@ -138,10 +142,9 @@ if(action == ST)//we have the rest of the star to finish(ST -> STAR)
 {
   bs match {
     case Z::bs => {//pv -> partial value  Each grid in a stack does not hold a whole value but a partial one.
-
       pv_stack(sp) = ENDSTS
       if(next_stack.isEmpty)
-        return Unit
+        return 
       val n = next_stack.last
       next_stack.trimEnd(1)
       decode_stack(n, bs)
@@ -158,14 +161,16 @@ if(action == ST)//we have the rest of the star to finish(ST -> STAR)
       regx_stack += r 
       decode_stack(sp, bs)
     }
+    case _ => println("Sequence not decodable")
   }
+
 }
-else{
+else if(action == NST){
   (r, bs) match{
     case (ONE, bs) => {
       pv_stack(sp) = Empt
       if(next_stack.isEmpty)
-        return Unit
+        return 
       val n = next_stack.last
       next_stack.trimEnd(1)
       decode_stack(n, bs)
@@ -173,12 +178,35 @@ else{
     case (PRED(f), C(c)::bs) => {
       pv_stack(sp) = Ch(c)
       if(next_stack.isEmpty)
-        return Unit
+        return 
       val n = next_stack.last
       next_stack.trimEnd(1)
       decode_stack(n, bs)
     }
-    case (ALTS(rs), bs) => {
+    case (ALTS(rs), Z::bs1) => {
+      pv_stack(sp) = ALTSTART
+      pv_stack.insert(sp + 1, LEF)
+      pv_stack.insert(sp + 2, Plhdr)
+      pv_stack.insert(sp + 3, ALTEND)
+      for(i <- 0 to next_stack.length - 1){
+        next_stack(i) = next_stack(i) + 3
+      }
+      regx_stack += rs.head
+      action_stack += NST
+      decode_stack(sp + 2, bs1)
+    }
+    case (ALTS(rs), S::bs1) => {
+      pv_stack(sp) = ALTSTART
+      pv_stack.insert(sp + 1, RIG)
+      pv_stack.insert(sp + 2, Plhdr)
+      for(i <- 0 to next_stack.length - 1){
+        next_stack(i) = next_stack(i) + 2
+      }
+      regx_stack += ALTS(rs.tail)
+      action_stack += AL
+      decode_stack(sp + 2, bs1)		
+    }
+      /*
       val le = rs.length
       val det = bs.take(le - 1)
       val chosen =  det.indexWhere(_ == Z)
@@ -196,8 +224,7 @@ else{
         pv_stack(sp) = Posi(chosen + 1)
         regx_stack += rs(chosen)
         decode_stack(sp + 1, bs.drop(chosen + 1))
-      }
-    }
+      }*/
     case (SEQ(r1, r2), bs) => {
       action_stack += NST
       action_stack += NST
@@ -230,7 +257,7 @@ else{
       pv_stack(sp) = STS 
       pv_stack.insert(sp + 1, ENDSTS)
       if(next_stack.isEmpty)
-        return Unit
+        return 
       for(i <- 0 to next_stack.length - 1){
         next_stack(i) = next_stack(i) + 1
       }
@@ -248,10 +275,49 @@ else{
       regx_stack += r1
       decode_stack(sp + 1, bs)
     }//shouldn't go beyond this point
-    case (_, Nil) => assert(1 == 0)
+    case (_, _) => println("Error with NST")
   }
 }
-
+else{//action is AL
+  r match {
+    case (ALTS(r1::Nil)) => {
+      pv_stack.insert(sp + 1, ALTEND)
+      for(i <- 0 to next_stack.length - 1){
+        next_stack(i) = next_stack(i) + 1
+      }
+      action_stack += NST
+      regx_stack += r1
+      decode_stack(sp, bs)
+    }
+    case (ALTS(rs)) => {
+      bs match {
+        case (Z::bs1) => {
+          pv_stack(sp) = LEF
+          pv_stack.insert(sp + 1, ALTEND)
+          pv_stack.insert(sp + 1, Plhdr)
+          for(i <- 0 to next_stack.length - 1){
+            next_stack(i) = next_stack(i) + 2
+          }
+          regx_stack += rs.head
+          action_stack += NST
+          decode_stack(sp + 1, bs1)
+        }
+        case (S::bs2) => {
+          pv_stack(sp) = RIG
+          pv_stack.insert(sp + 1, Plhdr)
+          for(i <- 0 to next_stack.length - 1){
+            next_stack(i) = next_stack(i) + 1
+          }
+          regx_stack += ALTS(rs.tail)
+          action_stack += AL
+          decode_stack(sp + 1, bs2)
+        }
+        case _ => println("Not decodable")
+      }
+    }
+    case (rs) => println(r,bs)
+  }
+}
 }
 //advantage: may decode chunks of bits
 def decode(r: Rexp, bs: Bits) = {
@@ -512,7 +578,7 @@ write "Fib";
 */
 
 println("Iteration test with fib")
-for (i <- 650 to 1000 by 40) {
+for (i <- 100 to 1000 by 400) {
   print(i.toString + ":  ")
   time(lexing_simp((WHILE_REGS), (prog2 * i)))
   //time(lex_simp(internalise(WHILE_REGS), (prog2 * i).toList))
